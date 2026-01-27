@@ -215,12 +215,15 @@ export async function POST(request: NextRequest) {
 
 // Helper functions
 function getRelativeTime(date: Date | string): string {
-  // Get current time in WIB (UTC+7)
+  // Get current time and convert to WIB (UTC+7)
   const now = new Date();
+  const wibNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+  
+  // submittedDate from database is ALREADY in WIB - do NOT add 7 hours again!
   const submittedDate = new Date(date);
   
-  // Calculate difference (both dates are in UTC, comparison is correct)
-  const diffInMs = now.getTime() - submittedDate.getTime();
+  // Calculate difference: current WIB time - submitted WIB time
+  const diffInMs = wibNow.getTime() - submittedDate.getTime();
   
   // Handle future dates (timezone issues)
   if (diffInMs < 0) {

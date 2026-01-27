@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { DisasterData } from '@/lib/types';
-import type { Map, Marker, Circle, DivIcon } from 'leaflet';
+import type { Map, Marker, DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 interface MapComponentProps {
@@ -37,9 +37,7 @@ export default function MapComponent({
   const mapInstanceRef = useRef<Map | null>(null);
   const fullscreenMapInstanceRef = useRef<Map | null>(null);
   const markersRef = useRef<Marker[]>([]);
-  const circlesRef = useRef<Circle[]>([]);
   const fullscreenMarkersRef = useRef<Marker[]>([]);
-  const fullscreenCirclesRef = useRef<Circle[]>([]);
 
   // Lock body scroll
   useEffect(() => {
@@ -160,7 +158,7 @@ export default function MapComponent({
   }, []);
 
   // Cleanup map helper
-  const cleanupMap = useCallback((mapRef: React.MutableRefObject<Map | null>, markersRefArr: React.MutableRefObject<Marker[]>, circlesRefArr: React.MutableRefObject<Circle[]>) => {
+  const cleanupMap = useCallback((mapRef: React.MutableRefObject<Map | null>, markersRefArr: React.MutableRefObject<Marker[]>) => {
     // Remove markers
     markersRefArr.current.forEach(marker => {
       try {
@@ -170,16 +168,6 @@ export default function MapComponent({
       }
     });
     markersRefArr.current = [];
-
-    // Remove circles
-    circlesRefArr.current.forEach(circle => {
-      try {
-        circle.remove();
-      } catch {
-        // Ignore errors during cleanup
-      }
-    });
-    circlesRefArr.current = [];
 
     // Remove map
     if (mapRef.current) {
@@ -205,7 +193,7 @@ export default function MapComponent({
       if (isCancelled || !mapContainerRef.current) return;
 
       // Clean up existing map first
-      cleanupMap(mapInstanceRef, markersRef, circlesRef);
+      cleanupMap(mapInstanceRef, markersRef);
 
       // Double check container is clean
       if ((mapContainerRef.current as HTMLDivElement & { _leaflet_id?: number })._leaflet_id) {
@@ -260,19 +248,6 @@ export default function MapComponent({
           markersRef.current.push(marker);
         });
 
-        // Add circles for severe disasters
-        disasters.filter(d => d.tingkatKerusakan === 'Berat').forEach((disaster) => {
-          if (isCancelled) return;
-          const circle = L.circle([disaster.lat, disaster.lng], {
-            radius: 2000,
-            color: '#dc2626',
-            fillColor: '#dc2626',
-            fillOpacity: 0.1,
-            weight: 1
-          }).addTo(map);
-          circlesRef.current.push(circle);
-        });
-
         // Pan to selected disaster or mapCenter
         if (mapCenter) {
           map.setView([mapCenter.lat, mapCenter.lng], 15);
@@ -288,7 +263,7 @@ export default function MapComponent({
 
     return () => {
       isCancelled = true;
-      cleanupMap(mapInstanceRef, markersRef, circlesRef);
+      cleanupMap(mapInstanceRef, markersRef);
     };
   }, [isMounted, isFullscreen, isDetailOverlayOpen, disasters, selectedDisaster, createCustomIcon, createPopupContent, onDisasterSelect, onOpenDetailOverlay, cleanupMap, mapCenter]);
 
@@ -305,7 +280,7 @@ export default function MapComponent({
       if (isCancelled || !fullscreenMapContainerRef.current) return;
 
       // Clean up existing map first
-      cleanupMap(fullscreenMapInstanceRef, fullscreenMarkersRef, fullscreenCirclesRef);
+      cleanupMap(fullscreenMapInstanceRef, fullscreenMarkersRef);
 
       // Double check container is clean
       if ((fullscreenMapContainerRef.current as HTMLDivElement & { _leaflet_id?: number })._leaflet_id) {
@@ -364,19 +339,6 @@ export default function MapComponent({
           
           fullscreenMarkersRef.current.push(marker);
         });
-
-        // Add circles
-        disasters.filter(d => d.tingkatKerusakan === 'Berat').forEach((disaster) => {
-          if (isCancelled) return;
-          const circle = L.circle([disaster.lat, disaster.lng], {
-            radius: 2000,
-            color: '#dc2626',
-            fillColor: '#dc2626',
-            fillOpacity: 0.1,
-            weight: 1
-          }).addTo(map);
-          fullscreenCirclesRef.current.push(circle);
-        });
       } catch (error) {
         console.error('Error initializing fullscreen map:', error);
       }
@@ -386,7 +348,7 @@ export default function MapComponent({
 
     return () => {
       isCancelled = true;
-      cleanupMap(fullscreenMapInstanceRef, fullscreenMarkersRef, fullscreenCirclesRef);
+      cleanupMap(fullscreenMapInstanceRef, fullscreenMarkersRef);
     };
   }, [isMounted, isFullscreen, disasters, selectedDisaster, createCustomIcon, createPopupContent, onDisasterSelect, onOpenDetailOverlay, cleanupMap]);
 

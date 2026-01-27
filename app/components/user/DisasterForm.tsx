@@ -837,7 +837,7 @@ export default function DisasterForm({ onClose, onSubmit }: DisasterFormProps) {
                       setShowMap(true);
                     }
                   }}
-                  className="w-full px-6 py-4 bg-linear-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg flex items-center justify-center gap-2"
+                  className="w-full px-6 py-4 bg-linear-to-r from-red-600 to-red-700 text-white rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all shadow-lg flex items-center justify-center gap-2"
                 >
                   <MapPin className="w-5 h-5" />
                   Lanjut ke Lokasi {photoMode === 'capture' ? '(GPS Otomatis)' : '(Pilih di Peta)'}

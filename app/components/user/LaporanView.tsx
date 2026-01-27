@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import type { DisasterData } from "@/lib/types";
 import { getAllReports } from "@/lib/api";
 import Pagination from "@/app/components/ui/Pagination";
+import UserReportDetailModal from "./UserReportDetailModal";
+import InvalidReportFormModal from "./InvalidReportFormModal";
 import { 
   MapPin, 
   User, 
@@ -51,7 +53,16 @@ export default function LaporanView() {
   
   // Detail modal
   const [selectedReport, setSelectedReport] = useState<DisasterData | null>(null);
+  const [showDetailOverlay, setShowDetailOverlay] = useState(false);
+  const [showInvalidReportForm, setShowInvalidReportForm] = useState(false);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
+  const [reportInvalidReports, setReportInvalidReports] = useState<Array<{
+    id: string;
+    reason: string;
+    reporterName: string | null;
+    createdAt: string;
+  }>>([]);
+  const [loadingInvalidReports, setLoadingInvalidReports] = useState(false);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -76,6 +87,30 @@ export default function LaporanView() {
   useEffect(() => {
     loadReports();
   }, []);
+
+  // Load invalid reports when detail modal is shown
+  const loadInvalidReports = async (reportId: number) => {
+    try {
+      setLoadingInvalidReports(true);
+      const response = await fetch(`/api/invalid-reports?reportId=${reportId}`);
+      const data = await response.json();
+      if (data.success) {
+        setReportInvalidReports(data.invalidReports || []);
+      }
+    } catch (error) {
+      console.error('Failed to load invalid reports:', error);
+      setReportInvalidReports([]);
+    } finally {
+      setLoadingInvalidReports(false);
+    }
+  };
+
+  // When report is selected, show detail modal and load invalid reports
+  const handleReportSelect = (report: DisasterData) => {
+    setSelectedReport(report);
+    setShowDetailOverlay(true);
+    loadInvalidReports(report.id);
+  };
 
   // Toggle sort
   const toggleSort = (field: SortField) => {
@@ -457,7 +492,7 @@ export default function LaporanView() {
                           <td className="py-3 px-4">
                             <div className="flex items-center justify-center gap-1">
                               <button
-                                onClick={() => setSelectedReport(report)}
+                                onClick={() => handleReportSelect(report)}
                                 className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                                 title="Detail"
                               >
@@ -493,153 +528,35 @@ export default function LaporanView() {
         </div>
       </div>
 
-      {/* Detail Modal */}
-      {selectedReport && (
-        <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setSelectedReport(null)}
-        >
-          <div 
-            className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="relative">
-              {selectedReport.fotoLokasi && selectedReport.fotoLokasi.length > 0 ? (
-                <div className="h-48 relative">
-                  <img
-                    src={selectedReport.fotoLokasi[0]}
-                    alt={selectedReport.namaObjek}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent"></div>
-                </div>
-              ) : (
-                <div className="h-32 bg-linear-to-r from-red-600 to-orange-500"></div>
-              )}
-              
-              <button
-                onClick={() => setSelectedReport(null)}
-                className="absolute top-4 right-4 w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      {/* Detail Modal using UserReportDetailModal */}
+      {showDetailOverlay && selectedReport && (
+        <UserReportDetailModal
+          disaster={selectedReport}
+          onClose={() => {
+            setShowDetailOverlay(false);
+            setSelectedReport(null);
+          }}
+          onOpenInvalidReportForm={() => {
+            setShowDetailOverlay(false);
+            setShowInvalidReportForm(true);
+          }}
+          reportInvalidReports={reportInvalidReports}
+          loadingInvalidReports={loadingInvalidReports}
+          onPhotoClick={setSelectedPhotoUrl}
+        />
+      )}
 
-              <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
-                <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${getSeverityColor(selectedReport.tingkatKerusakan).badge} mb-2`}>
-                  Kerusakan {selectedReport.tingkatKerusakan}
-                </span>
-                <h2 className="text-xl font-bold drop-shadow-lg">{selectedReport.namaObjek}</h2>
-              </div>
-            </div>
-
-            {/* Modal Content */}
-            <div className="p-5 max-h-[calc(90vh-12rem)] overflow-y-auto">
-              {/* Photo Gallery */}
-              {selectedReport.fotoLokasi && selectedReport.fotoLokasi.length > 0 && (
-                <div className="mb-5">
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Foto Dokumentasi</h3>
-                  <div className="grid grid-cols-4 gap-2">
-                    {selectedReport.fotoLokasi.map((foto, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setSelectedPhotoUrl(foto)}
-                        className="aspect-square rounded-lg overflow-hidden hover:opacity-80 transition-opacity"
-                      >
-                        <img src={foto} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Info Grid */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 text-gray-500 mb-1">
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium uppercase">Lokasi</span>
-                  </div>
-                  <p className="text-gray-900 text-sm font-medium">{selectedReport.desaKecamatan}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 text-gray-500 mb-1">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium uppercase">Waktu</span>
-                  </div>
-                  <p className="text-gray-900 text-sm font-medium">{formatFullDate(selectedReport.submittedAt)}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 text-gray-500 mb-1">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium uppercase">Jenis</span>
-                  </div>
-                  <p className="text-gray-900 text-sm font-medium">{selectedReport.jenisKerusakan}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 text-gray-500 mb-1">
-                    <User className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium uppercase">Pelapor</span>
-                  </div>
-                  <p className="text-gray-900 text-sm font-medium">{selectedReport.namaPelapor}</p>
-                </div>
-              </div>
-
-              {/* Status Penanganan */}
-              <div className={`rounded-lg p-3 mb-5 ${
-                selectedReport.statusTangani === 'SUDAH_DITANGANI' 
-                  ? 'bg-green-50 border border-green-200' 
-                  : 'bg-amber-50 border border-amber-200'
-              }`}>
-                <span className={`text-xs font-semibold uppercase ${
-                  selectedReport.statusTangani === 'SUDAH_DITANGANI' ? 'text-green-700' : 'text-amber-700'
-                }`}>Status Penanganan</span>
-                <p className={`font-medium text-sm mt-0.5 ${
-                  selectedReport.statusTangani === 'SUDAH_DITANGANI' ? 'text-green-900' : 'text-amber-900'
-                }`}>
-                  {selectedReport.statusTangani === 'SUDAH_DITANGANI' ? 'Sudah Ditangani' : 'Belum Ditangani'}
-                </p>
-              </div>
-
-              {/* Keterangan */}
-              <div className="mb-5">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Keterangan</h3>
-                <p className="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-lg p-3">
-                  {selectedReport.keteranganKerusakan}
-                </p>
-              </div>
-
-              {/* Coordinates & Actions */}
-              <div className="bg-gray-900 rounded-lg p-3 text-white flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-gray-400 uppercase">Koordinat</span>
-                  <p className="font-mono text-sm mt-0.5">{selectedReport.lat.toFixed(6)}, {selectedReport.lng.toFixed(6)}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setSelectedReport(null);
-                    viewOnMap(selectedReport);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <MapIcon className="w-4 h-4" />
-                  Peta
-                </button>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-              <span className="text-xs text-gray-400">ID: #{selectedReport.id}</span>
-              <button
-                onClick={() => setSelectedReport(null)}
-                className="px-5 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Invalid Report Form Modal */}
+      {showInvalidReportForm && selectedReport && (
+        <InvalidReportFormModal
+          reportId={selectedReport.id}
+          reportName={selectedReport.namaObjek}
+          onClose={() => setShowInvalidReportForm(false)}
+          onSuccess={() => {
+            setShowInvalidReportForm(false);
+            loadInvalidReports(selectedReport.id);
+          }}
+        />
       )}
 
       {/* Photo Viewer Modal */}
