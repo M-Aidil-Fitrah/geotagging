@@ -240,7 +240,23 @@ export default function MapComponent({
             .addTo(map)
             .bindPopup(createPopupContent(disaster), { maxWidth: 280 });
 
-          marker.on('click', () => onDisasterSelect(disaster));
+          marker.on('click', () => {
+            // Langsung zoom in maksimal ke marker yang diklik
+            map.setView([disaster.lat, disaster.lng], 18, {
+              animate: true,
+              duration: 0.5
+            });
+            
+            // Buka popup
+            marker.openPopup();
+            
+            // Trigger sidebar dan detail overlay
+            onDisasterSelect(disaster);
+            if (onOpenDetailOverlay) {
+              onOpenDetailOverlay(disaster);
+            }
+          });
+          
           markersRef.current.push(marker);
         });
 
@@ -274,7 +290,7 @@ export default function MapComponent({
       isCancelled = true;
       cleanupMap(mapInstanceRef, markersRef, circlesRef);
     };
-  }, [isMounted, isFullscreen, isDetailOverlayOpen, disasters, selectedDisaster, createCustomIcon, createPopupContent, onDisasterSelect, cleanupMap, mapCenter]);
+  }, [isMounted, isFullscreen, isDetailOverlayOpen, disasters, selectedDisaster, createCustomIcon, createPopupContent, onDisasterSelect, onOpenDetailOverlay, cleanupMap, mapCenter]);
 
   // Initialize fullscreen map
   useEffect(() => {
@@ -329,7 +345,23 @@ export default function MapComponent({
             .addTo(map)
             .bindPopup(createPopupContent(disaster), { maxWidth: 280 });
 
-          marker.on('click', () => onDisasterSelect(disaster));
+          marker.on('click', () => {
+            // Langsung zoom in maksimal ke marker yang diklik
+            map.setView([disaster.lat, disaster.lng], 18, {
+              animate: true,
+              duration: 0.5
+            });
+            
+            // Buka popup
+            marker.openPopup();
+            
+            // Trigger sidebar dan detail overlay
+            onDisasterSelect(disaster);
+            if (onOpenDetailOverlay) {
+              onOpenDetailOverlay(disaster);
+            }
+          });
+          
           fullscreenMarkersRef.current.push(marker);
         });
 
@@ -356,7 +388,7 @@ export default function MapComponent({
       isCancelled = true;
       cleanupMap(fullscreenMapInstanceRef, fullscreenMarkersRef, fullscreenCirclesRef);
     };
-  }, [isMounted, isFullscreen, disasters, selectedDisaster, createCustomIcon, createPopupContent, onDisasterSelect, cleanupMap]);
+  }, [isMounted, isFullscreen, disasters, selectedDisaster, createCustomIcon, createPopupContent, onDisasterSelect, onOpenDetailOverlay, cleanupMap]);
 
   // Listen for custom events from popup buttons
   useEffect(() => {

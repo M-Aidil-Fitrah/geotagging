@@ -102,6 +102,8 @@ export default function DisasterForm({ onClose, onSubmit }: DisasterFormProps) {
   const [selectedPosition, setSelectedPosition] = useState<[number, number] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string>('');
 
   // ========== TAMBAHAN BARU: State untuk Camera Switch ==========
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
@@ -228,7 +230,7 @@ export default function DisasterForm({ onClose, onSubmit }: DisasterFormProps) {
           audio: false
         });
         console.log(`Camera started with ${modeToUse} facingMode`);
-      } catch (err) {
+      } catch {
         // Fallback for desktop - just get any video device
         console.log('Falling back to default video device (desktop)');
         stream = await navigator.mediaDevices.getUserMedia({
@@ -433,54 +435,133 @@ export default function DisasterForm({ onClose, onSubmit }: DisasterFormProps) {
     }
   };
 
-  // Handle submit
+  // Handle submit with comprehensive error handling
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validation
     if (!formData.lat || !formData.lng) {
+      setSubmitError('Koordinat lokasi harus diisi');
       alert('Koordinat lokasi harus diisi');
       return;
     }
 
     if (capturedPhotos.length === 0) {
+      setSubmitError('Minimal 1 foto harus diupload');
       alert('Minimal 1 foto harus diupload');
       return;
     }
 
+    // Validasi format kontak
+    const kontakValue = formData.kontak.trim();
+    if (kontakValue.length < 10 || kontakValue.length > 15) {
+      setSubmitError('Nomor kontak harus antara 10-15 digit');
+      alert('Nomor kontak harus antara 10-15 digit');
+      return;
+    }
+
+    // Cek apakah kontak hanya angka
+    if (!/^[0-9]+$/.test(kontakValue)) {
+      setSubmitError('Nomor kontak hanya boleh berisi angka');
+      alert('Nomor kontak hanya boleh berisi angka');
+      return;
+    }
+
     setIsSubmitting(true);
+    setIsUploadingPhotos(true);
     setSubmitError('');
+    setUploadProgress('');
+
+    const startTime = Date.now();
+    const TIMEOUT_MS = 60000; // 60 seconds timeout
 
     try {
-      // 1. Upload photos first
+      // Check network connectivity
+      if (!navigator.onLine) {
+        throw new Error('NETWORK_ERROR: Tidak ada koneksi internet. Pastikan Anda terhubung ke internet dan coba lagi.');
+      }
+
+      // 1. Upload photos first with timeout
+      setUploadProgress(`Mengunggah ${capturedPhotos.length} foto...`);
       const files = capturedPhotos.map(photo => photo.file);
-      const uploadedPaths = await uploadPhotos(files);
+      
+      const uploadPromise = uploadPhotos(files);
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('TIMEOUT: Upload foto memakan waktu terlalu lama. Periksa koneksi internet Anda dan coba lagi.')), TIMEOUT_MS)
+      );
+
+      const uploadedPaths = await Promise.race([uploadPromise, timeoutPromise]);
+      
+      if (!uploadedPaths || uploadedPaths.length === 0) {
+        throw new Error('Gagal mengunggah foto. Tidak ada file yang berhasil diupload.');
+      }
+
+      setIsUploadingPhotos(false);
+      setUploadProgress('Foto berhasil diunggah, mengirim laporan...');
+
+      // Check network again before submit
+      if (!navigator.onLine) {
+        throw new Error('NETWORK_ERROR: Koneksi internet terputus. Foto sudah terupload, tapi laporan belum terkirim. Coba lagi.');
+      }
 
       // 2. Submit report with uploaded photo paths
       const reportData = {
         lat: formData.lat,
         lng: formData.lng,
-        namaPelapor: formData.namaPelapor,
-        kontak: formData.kontak,
-        desaKecamatan: formData.desaKecamatan,
-        namaObjek: formData.namaObjek,
-        jenisKerusakan: formData.jenisKerusakan,
+        namaPelapor: formData.namaPelapor.trim(),
+        kontak: kontakValue,
+        desaKecamatan: formData.desaKecamatan.trim(),
+        namaObjek: formData.namaObjek.trim(),
+        jenisKerusakan: formData.jenisKerusakan.trim(),
         tingkatKerusakan: formData.tingkatKerusakan,
-        keteranganKerusakan: formData.keteranganKerusakan,
+        keteranganKerusakan: formData.keteranganKerusakan.trim(),
         fotoLokasi: uploadedPaths,
       };
 
-      const report = await createReport(reportData);
+      const submitPromise = createReport(reportData);
+      const submitTimeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('TIMEOUT: Pengiriman laporan memakan waktu terlalu lama. Periksa koneksi internet Anda dan coba lagi.')), TIMEOUT_MS)
+      );
+
+      const report = await Promise.race([submitPromise, submitTimeoutPromise]);
+
+      const elapsedTime = Date.now() - startTime;
+      console.log(`Report submitted successfully in ${elapsedTime}ms`);
 
       // Success!
+      setUploadProgress('');
       alert('Laporan berhasil dikirim! Menunggu verifikasi admin.');
       onSubmit(report);
       onClose();
     } catch (error) {
       console.error('Submit error:', error);
-      setSubmitError(error instanceof Error ? error.message : 'Gagal mengirim laporan');
-      alert('Gagal mengirim laporan. Silakan coba lagi.');
+      
+      let errorMessage = 'Gagal mengirim laporan. Silakan coba lagi.';
+      
+      if (error instanceof Error) {
+        const errMsg = error.message;
+        
+        if (errMsg.includes('NETWORK_ERROR')) {
+          errorMessage = errMsg.replace('NETWORK_ERROR: ', '');
+        } else if (errMsg.includes('TIMEOUT')) {
+          errorMessage = errMsg.replace('TIMEOUT: ', '');
+        } else if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
+          errorMessage = 'Koneksi internet bermasalah atau server tidak dapat dijangkau. Periksa koneksi Anda dan coba lagi.';
+        } else if (errMsg.includes('kontak') || errMsg.includes('pattern') || errMsg.includes('string')) {
+          errorMessage = 'Format nomor kontak tidak valid. Pastikan hanya berisi angka (10-15 digit).';
+        } else if (errMsg.includes('413') || errMsg.includes('too large')) {
+          errorMessage = 'Ukuran foto terlalu besar. Gunakan foto dengan ukuran lebih kecil.';
+        } else if (error.message) {
+          errorMessage = `Error: ${error.message}`;
+        }
+      }
+      
+      setSubmitError(errorMessage);
+      alert(errorMessage);
     } finally {
       setIsSubmitting(false);
+      setIsUploadingPhotos(false);
+      setUploadProgress('');
     }
   };
 
@@ -808,10 +889,11 @@ export default function DisasterForm({ onClose, onSubmit }: DisasterFormProps) {
                     }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     placeholder="081234567890"
+                    minLength={10}
                     maxLength={15}
-                    pattern="[0-9]*"
+                    inputMode="numeric"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Hanya ditampilkan untuk keperluan admin (bukan untuk ditampilkan umum)</p>
+                  <p className="text-xs text-gray-500 mt-1">Nomor hanya berisi angka 10-15 digit. Hanya ditampilkan untuk keperluan admin.</p>
                 </div>
 
                 <div>
@@ -897,11 +979,59 @@ export default function DisasterForm({ onClose, onSubmit }: DisasterFormProps) {
                 </div>
               </div>
 
+              {/* Upload Progress */}
+              {isUploadingPhotos && uploadProgress && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                    <div className="flex-1">
+                      <p className="text-blue-700 font-medium text-sm">{uploadProgress}</p>
+                      <p className="text-blue-600 text-xs mt-1">Harap tunggu, jangan tutup halaman ini...</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Submit Error */}
-              {submitError && (
-                <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg">
-                  <AlertCircle className="w-5 h-5 shrink-0" />
-                  <p className="text-sm font-medium">{submitError}</p>
+              {submitError && !isSubmitting && (
+                <div className="flex items-start gap-2 text-red-600 bg-red-50 p-4 rounded-lg border border-red-200">
+                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{submitError}</p>
+                    {submitError.includes('internet') || submitError.includes('koneksi') ? (
+                      <p className="text-xs mt-2 text-red-500">Tip: Pastikan Anda memiliki koneksi internet yang stabil dan coba lagi.</p>
+                    ) : submitError.includes('kontak') ? (
+                      <p className="text-xs mt-2 text-red-500">Tip: Nomor kontak harus berisi 10-15 digit angka saja (contoh: 081234567890).</p>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Progress */}
+              {isUploadingPhotos && uploadProgress && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                    <div className="flex-1">
+                      <p className="text-blue-700 font-medium text-sm">{uploadProgress}</p>
+                      <p className="text-blue-600 text-xs mt-1">Harap tunggu, jangan tutup halaman ini...</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Submit Error */}
+              {submitError && !isSubmitting && (
+                <div className="flex items-start gap-2 text-red-600 bg-red-50 p-4 rounded-lg border border-red-200">
+                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{submitError}</p>
+                    {submitError.includes('internet') || submitError.includes('koneksi') ? (
+                      <p className="text-xs mt-2 text-red-500">Tip: Pastikan Anda memiliki koneksi internet yang stabil dan coba lagi.</p>
+                    ) : submitError.includes('kontak') ? (
+                      <p className="text-xs mt-2 text-red-500">Tip: Nomor kontak harus berisi 10-15 digit angka saja (contoh: 081234567890).</p>
+                    ) : null}
+                  </div>
                 </div>
               )}
 

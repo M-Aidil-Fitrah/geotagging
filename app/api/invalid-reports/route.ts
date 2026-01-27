@@ -62,33 +62,36 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/invalid-reports
- * Get semua invalid reports (admin only)
+ * Get invalid reports by reportId (public access untuk user bisa cek count)
+ * Untuk GET all tanpa filter, require admin token
  * Query params:
  * - reportId: filter by report ID
  */
 export async function GET(request: NextRequest) {
   try {
-    // Verify authentication untuk GET all (admin only)
-    const token = request.cookies.get('admin-token')?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Not authenticated' } as ApiResponse,
-        { status: 401 }
-      );
-    }
-
-    const payload = await verifyToken(token);
-
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' } as ApiResponse,
-        { status: 401 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const reportId = searchParams.get('reportId');
+
+    // If no reportId specified, require admin authentication
+    if (!reportId) {
+      const token = request.cookies.get('admin-token')?.value;
+
+      if (!token) {
+        return NextResponse.json(
+          { success: false, error: 'Not authenticated' } as ApiResponse,
+          { status: 401 }
+        );
+      }
+
+      const payload = await verifyToken(token);
+
+      if (!payload) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid token' } as ApiResponse,
+          { status: 401 }
+        );
+      }
+    }
 
     if (reportId) {
       // Get invalid reports untuk report tertentu

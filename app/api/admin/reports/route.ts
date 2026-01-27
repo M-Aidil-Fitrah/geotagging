@@ -28,23 +28,22 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    
+    // REMOVED PAGINATION - Get all reports without limit
+    // const page = parseInt(searchParams.get('page') || '1');
+    // const limit = parseInt(searchParams.get('limit') || '50');
 
-    // Get reports dengan koordinat dari PostGIS
+    // Get ALL reports dengan koordinat dari PostGIS
     const allReports = await getReportsWithCoordinates(
       status && Object.values(ReportStatus).includes(status as ReportStatus)
         ? { status }
         : undefined
     );
 
-    // Pagination
-    const skip = (page - 1) * limit;
-    const paginatedReports = allReports.slice(skip, skip + limit);
     const totalCount = allReports.length;
 
     // Get reviewedBy data untuk setiap report
-    const reportIds = paginatedReports
+    const reportIds = allReports
       .map(r => r.reviewedById)
       .filter((id): id is number => id !== null);
     
@@ -58,7 +57,7 @@ export async function GET(request: NextRequest) {
     const usersMap = new Map(users.map(u => [u.id, u]));
 
     // Transform data dengan reviewedBy
-    const transformedReports = paginatedReports.map((report) => ({
+    const transformedReports = allReports.map((report) => ({
       ...report,
       reviewedBy: report.reviewedById ? usersMap.get(report.reviewedById) || null : null,
     }));
@@ -73,17 +72,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       reports: transformedReports,
-      pagination: {
-        page,
-        limit,
-        totalCount,
-        totalPages: Math.ceil(totalCount / limit),
-      },
       stats: {
         pending: pendingCount,
         approved: approvedCount,
         rejected: rejectedCount,
         total: pendingCount + approvedCount + rejectedCount,
+        totalDisplayed: totalCount,
       },
     });
   } catch (error) {

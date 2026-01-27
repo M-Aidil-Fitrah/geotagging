@@ -5,32 +5,13 @@ import type { ApiResponse } from '@/lib/types';
 
 /**
  * GET /api/invalid-reports/[reportId]
- * Get invalid reports untuk report tertentu
+ * Get invalid reports untuk report tertentu (public access)
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ reportId: string }> }
 ) {
   try {
-    // Verify authentication (admin only)
-    const token = request.cookies.get('admin-token')?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Not authenticated' } as ApiResponse,
-        { status: 401 }
-      );
-    }
-
-    const payload = await verifyToken(token);
-
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' } as ApiResponse,
-        { status: 401 }
-      );
-    }
-
     const { reportId } = await params;
     const reportIdNum = parseInt(reportId);
 
