@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        data: transformedReports,
+        invalidReports: transformedReports,
         count: transformedReports.length
       } as ApiResponse<InvalidReportWithReport[]>);
     }
@@ -180,7 +180,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: transformedReports,
+      invalidReports: transformedReports,
       count: transformedReports.length
     } as ApiResponse<InvalidReportWithReport[]>);
 
