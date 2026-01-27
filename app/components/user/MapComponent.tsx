@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import type { DisasterData } from '@/lib/types';
 import type { Map, Marker, DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import UserReportDetailModal from './UserReportDetailModal';
+import InvalidReportFormModal from './InvalidReportFormModal';
 
 interface MapComponentProps {
   selectedDisaster: DisasterData | null;
@@ -30,6 +32,16 @@ export default function MapComponent({
   const [isMounted, setIsMounted] = useState(false);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenSelectedDisaster, setFullscreenSelectedDisaster] = useState<DisasterData | null>(null);
+  const [showFullscreenDetailOverlay, setShowFullscreenDetailOverlay] = useState(false);
+  const [showFullscreenInvalidReportForm, setShowFullscreenInvalidReportForm] = useState(false);
+  const [fullscreenInvalidReports, setFullscreenInvalidReports] = useState<Array<{
+    id: string;
+    reason: string;
+    reporterName: string | null;
+    createdAt: string;
+  }>>([]);
+  const [loadingFullscreenInvalidReports, setLoadingFullscreenInvalidReports] = useState(false);
   
   // Refs for map instances with proper Leaflet types
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -51,6 +63,23 @@ export default function MapComponent({
     };
   }, [isFullscreen, selectedPhotoUrl, isDetailOverlayOpen]);
 
+  // Load invalid reports for fullscreen mode
+  const loadFullscreenInvalidReports = useCallback(async (reportId: number) => {
+    try {
+      setLoadingFullscreenInvalidReports(true);
+      const response = await fetch(`/api/invalid-reports?reportId=${reportId}`);
+      const data = await response.json();
+      if (data.success) {
+        setFullscreenInvalidReports(data.invalidReports || []);
+      }
+    } catch (error) {
+      console.error('Failed to load invalid reports:', error);
+      setFullscreenInvalidReports([]);
+    } finally {
+      setLoadingFullscreenInvalidReports(false);
+    }
+  }, []);
+
   // Mount check
   useEffect(() => {
     setIsMounted(true);
@@ -58,25 +87,6 @@ export default function MapComponent({
       setIsMounted(false);
     };
   }, []);
-
-  // Open marker popup when navigating from URL (from "Lihat di Peta" button)
-  useEffect(() => {
-    if (shouldOpenMarker && selectedDisaster && mapInstanceRef.current && markersRef.current.length > 0) {
-      // Find the marker for the selected disaster
-      const markerIndex = disasters.findIndex(d => d.id === selectedDisaster.id);
-      
-      if (markerIndex !== -1 && markersRef.current[markerIndex]) {
-        const marker = markersRef.current[markerIndex];
-        // Open the popup for this marker
-        marker.openPopup();
-        
-        // Notify parent that marker has been opened
-        if (onMarkerOpened) {
-          onMarkerOpened();
-        }
-      }
-    }
-  }, [shouldOpenMarker, selectedDisaster, disasters, onMarkerOpened]);
 
   // Create custom icon
   const createCustomIcon = useCallback((L: typeof import('leaflet'), tingkatKerusakan: string): DivIcon => {
@@ -104,57 +114,8 @@ export default function MapComponent({
         </div>
       `,
       iconSize: [38, 38],
-      iconAnchor: [19, 19],
-      popupAnchor: [0, -19]
+      iconAnchor: [19, 19]
     });
-  }, []);
-
-  // Create popup content
-  const createPopupContent = useCallback((disaster: DisasterData) => {
-    const badgeClass = disaster.tingkatKerusakan === 'Berat' 
-      ? 'background: #fef2f2; color: #b91c1c;' 
-      : disaster.tingkatKerusakan === 'Sedang' 
-        ? 'background: #fffbeb; color: #b45309;' 
-        : 'background: #f0fdf4; color: #15803d;';
-
-    return `
-      <div style="padding: 4px; min-width: 220px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px;">
-          <h3 style="font-weight: bold; color: #111827; font-size: 14px; flex: 1; margin: 0;">${disaster.jenisKerusakan}</h3>
-          <span style="padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 600; ${badgeClass}">
-            ${disaster.tingkatKerusakan}
-          </span>
-        </div>
-        ${disaster.fotoLokasi && disaster.fotoLokasi.length > 0 ? `
-          <div style="margin-bottom: 12px;">
-            <img 
-              src="${disaster.fotoLokasi[0]}" 
-              alt="Foto lokasi" 
-              style="width: 100%; height: 128px; object-fit: cover; border-radius: 8px; cursor: pointer;"
-              onclick="window.dispatchEvent(new CustomEvent('openPhoto', { detail: '${disaster.fotoLokasi[0]}' }))"
-              onerror="this.style.display='none'"
-            />
-            ${disaster.fotoLokasi.length > 1 ? `<p style="font-size: 12px; color: #6b7280; margin-top: 6px; text-align: center;">+${disaster.fotoLokasi.length - 1} foto</p>` : ''}
-          </div>
-        ` : ''}
-        <div style="margin-bottom: 12px;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            <p style="font-size: 12px; color: #4b5563; margin: 0;">${disaster.timestamp}</p>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <span style="font-size: 12px; color: #374151; margin: 0;">${disaster.namaPelapor}</span>
-          </div>
-        </div>
-        <button 
-          onclick="window.dispatchEvent(new CustomEvent('openDetail', { detail: ${disaster.id} }))"
-          style="width: 100%; background: linear-gradient(to right, #dc2626, #ea580c); color: white; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; border: none; cursor: pointer;"
-        >
-          Lihat Detail
-        </button>
-      </div>
-    `;
   }, []);
 
   // Cleanup map helper
@@ -225,8 +186,7 @@ export default function MapComponent({
           const icon = createCustomIcon(L, disaster.tingkatKerusakan);
           
           const marker = L.marker([disaster.lat, disaster.lng], { icon })
-            .addTo(map)
-            .bindPopup(createPopupContent(disaster), { maxWidth: 280 });
+            .addTo(map);
 
           marker.on('click', () => {
             // Langsung zoom in maksimal ke marker yang diklik
@@ -234,9 +194,6 @@ export default function MapComponent({
               animate: true,
               duration: 0.5
             });
-            
-            // Buka popup
-            marker.openPopup();
             
             // Trigger sidebar dan detail overlay
             onDisasterSelect(disaster);
@@ -265,7 +222,7 @@ export default function MapComponent({
       isCancelled = true;
       cleanupMap(mapInstanceRef, markersRef);
     };
-  }, [isMounted, isFullscreen, isDetailOverlayOpen, disasters, selectedDisaster, createCustomIcon, createPopupContent, onDisasterSelect, onOpenDetailOverlay, cleanupMap, mapCenter]);
+  }, [isMounted, isFullscreen, isDetailOverlayOpen, disasters, selectedDisaster, createCustomIcon, onDisasterSelect, onOpenDetailOverlay, cleanupMap, mapCenter]);
 
   // Initialize fullscreen map
   useEffect(() => {
@@ -317,24 +274,13 @@ export default function MapComponent({
           const icon = createCustomIcon(L, disaster.tingkatKerusakan);
           
           const marker = L.marker([disaster.lat, disaster.lng], { icon })
-            .addTo(map)
-            .bindPopup(createPopupContent(disaster), { maxWidth: 280 });
+            .addTo(map);
 
           marker.on('click', () => {
-            // Langsung zoom in maksimal ke marker yang diklik
-            map.setView([disaster.lat, disaster.lng], 18, {
-              animate: true,
-              duration: 0.5
-            });
-            
-            // Buka popup
-            marker.openPopup();
-            
-            // Trigger sidebar dan detail overlay
-            onDisasterSelect(disaster);
-            if (onOpenDetailOverlay) {
-              onOpenDetailOverlay(disaster);
-            }
+            // Di fullscreen mode: langsung buka overlay tanpa zoom
+            setFullscreenSelectedDisaster(disaster);
+            setShowFullscreenDetailOverlay(true);
+            loadFullscreenInvalidReports(disaster.id);
           });
           
           fullscreenMarkersRef.current.push(marker);
@@ -350,33 +296,7 @@ export default function MapComponent({
       isCancelled = true;
       cleanupMap(fullscreenMapInstanceRef, fullscreenMarkersRef);
     };
-  }, [isMounted, isFullscreen, disasters, selectedDisaster, createCustomIcon, createPopupContent, onDisasterSelect, onOpenDetailOverlay, cleanupMap]);
-
-  // Listen for custom events from popup buttons
-  useEffect(() => {
-    const handleOpenPhoto = (e: CustomEvent<string>) => {
-      setSelectedPhotoUrl(e.detail);
-    };
-
-    const handleOpenDetail = (e: CustomEvent<number>) => {
-      const disaster = disasters.find(d => d.id === e.detail);
-      if (disaster) {
-        setIsFullscreen(false);
-        onDisasterSelect(disaster);
-        if (onOpenDetailOverlay) {
-          onOpenDetailOverlay(disaster);
-        }
-      }
-    };
-
-    window.addEventListener('openPhoto', handleOpenPhoto as EventListener);
-    window.addEventListener('openDetail', handleOpenDetail as EventListener);
-
-    return () => {
-      window.removeEventListener('openPhoto', handleOpenPhoto as EventListener);
-      window.removeEventListener('openDetail', handleOpenDetail as EventListener);
-    };
-  }, [disasters, onDisasterSelect, onOpenDetailOverlay]);
+  }, [isMounted, isFullscreen, disasters, selectedDisaster, createCustomIcon, onDisasterSelect, onOpenDetailOverlay, cleanupMap, loadFullscreenInvalidReports]);
 
   if (!isMounted) {
     return (
@@ -404,7 +324,11 @@ export default function MapComponent({
       
       {/* Exit Button - z-index harus lebih tinggi dari leaflet controls */}
       <button
-        onClick={() => setIsFullscreen(false)}
+        onClick={() => {
+          setIsFullscreen(false);
+          setShowFullscreenDetailOverlay(false);
+          setFullscreenSelectedDisaster(null);
+        }}
         className="absolute top-4 right-4 bg-white hover:bg-gray-50 p-2.5 rounded-lg shadow-lg border border-gray-200 transition-colors"
         style={{ zIndex: 10000 }}
       >
@@ -431,6 +355,45 @@ export default function MapComponent({
           </div>
         </div>
       </div>
+
+      {/* Detail Modal dalam Fullscreen - Wrap dengan div z-index tinggi */}
+      {showFullscreenDetailOverlay && fullscreenSelectedDisaster && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 1000000, pointerEvents: 'none' }}>
+          <div style={{ pointerEvents: 'auto' }}>
+            <UserReportDetailModal
+              disaster={fullscreenSelectedDisaster}
+              onClose={() => {
+                setShowFullscreenDetailOverlay(false);
+                setFullscreenSelectedDisaster(null);
+              }}
+              onOpenInvalidReportForm={() => {
+                setShowFullscreenDetailOverlay(false);
+                setShowFullscreenInvalidReportForm(true);
+              }}
+              reportInvalidReports={fullscreenInvalidReports}
+              loadingInvalidReports={loadingFullscreenInvalidReports}
+              onPhotoClick={setSelectedPhotoUrl}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Invalid Report Form dalam Fullscreen - Wrap dengan div z-index tinggi */}
+      {showFullscreenInvalidReportForm && fullscreenSelectedDisaster && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 1000000, pointerEvents: 'none' }}>
+          <div style={{ pointerEvents: 'auto' }}>
+            <InvalidReportFormModal
+              reportId={fullscreenSelectedDisaster.id}
+              reportName={fullscreenSelectedDisaster.namaObjek}
+              onClose={() => setShowFullscreenInvalidReportForm(false)}
+              onSuccess={() => {
+                setShowFullscreenInvalidReportForm(false);
+                loadFullscreenInvalidReports(fullscreenSelectedDisaster.id);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   ) : null;
 
