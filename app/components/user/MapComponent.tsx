@@ -26,8 +26,8 @@ export default function MapComponent({
   disasters = [], 
   isDetailOverlayOpen = false,
   mapCenter = null,
-  shouldOpenMarker = false,
-  onMarkerOpened
+  shouldOpenMarker = false, // eslint-disable-line @typescript-eslint/no-unused-vars
+  onMarkerOpened // eslint-disable-line @typescript-eslint/no-unused-vars
 }: MapComponentProps) {
   const [isMounted, setIsMounted] = useState(false);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
@@ -452,11 +452,11 @@ export default function MapComponent({
         </>
       )}
 
-      {/* Photo Viewer Modal */}
-      {selectedPhotoUrl && (
+      {/* Photo Viewer Modal - Always rendered as portal on top of everything */}
+      {selectedPhotoUrl && isMounted && typeof document !== 'undefined' && createPortal(
         <div 
           className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4"
-          style={{ zIndex: 100001 }}
+          style={{ zIndex: 9999999 }}
           onClick={() => setSelectedPhotoUrl(null)}
         >
           <button 
@@ -473,7 +473,8 @@ export default function MapComponent({
             className="max-w-full max-h-full object-contain rounded-lg"
             onClick={(e) => e.stopPropagation()}
           />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
