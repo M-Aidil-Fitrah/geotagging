@@ -56,10 +56,22 @@ export async function GET(request: NextRequest) {
 
     const usersMap = new Map(users.map(u => [u.id, u]));
 
-    // Transform data dengan reviewedBy
+    // Get invalid reports counts for all reports
+    const invalidReportsCounts = await prisma.invalidReport.groupBy({
+      by: ['reportId'],
+      _count: {
+        id: true,
+      },
+    });
+    const invalidReportsCountMap = new Map(
+      invalidReportsCounts.map(item => [item.reportId, item._count.id])
+    );
+
+    // Transform data dengan reviewedBy dan invalidReportsCount
     const transformedReports = allReports.map((report) => ({
       ...report,
       reviewedBy: report.reviewedById ? usersMap.get(report.reviewedById) || null : null,
+      invalidReportsCount: invalidReportsCountMap.get(report.id) || 0,
     }));
 
     // Get counts by status

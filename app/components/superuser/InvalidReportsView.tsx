@@ -114,9 +114,9 @@ export default function InvalidReportsView() {
 
       const data = await response.json();
       
-      if (data.success && data.data && Array.isArray(data.data)) {
-        setInvalidReports(data.data);
-        const grouped = groupInvalidReportsByReportId(data.data);
+      if (data.success && data.invalidReports && Array.isArray(data.invalidReports)) {
+        setInvalidReports(data.invalidReports);
+        const grouped = groupInvalidReportsByReportId(data.invalidReports);
         setGroupedReports(grouped);
       } else {
         setInvalidReports([]);

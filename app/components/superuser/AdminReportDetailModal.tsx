@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from 'react';
 import { 
   X, 
   User, 
@@ -8,7 +9,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
-  XCircle
+  XCircle,
+  AlertCircle
 } from 'lucide-react';
 
 interface Report {
@@ -33,6 +35,7 @@ interface Report {
     name: string;
     username: string;
   } | null;
+  invalidReportsCount?: number;
 }
 
 interface AdminReportDetailModalProps {
@@ -48,6 +51,34 @@ export default function AdminReportDetailModal({
   onUpdateStatus,
   isUpdating 
 }: AdminReportDetailModalProps) {
+  const [reportInvalidReports, setReportInvalidReports] = useState<Array<{
+    id: string;
+    reason: string;
+    reporterName: string | null;
+    createdAt: string;
+  }>>([]);
+  const [loadingInvalidReports, setLoadingInvalidReports] = useState(false);
+
+  // Load invalid reports when modal opens
+  useEffect(() => {
+    const loadInvalidReports = async () => {
+      try {
+        setLoadingInvalidReports(true);
+        const response = await fetch(`/api/invalid-reports?reportId=${report.id}`);
+        const data = await response.json();
+        if (data.success) {
+          setReportInvalidReports(data.invalidReports || []);
+        }
+      } catch (error) {
+        console.error('Error loading invalid reports:', error);
+      } finally {
+        setLoadingInvalidReports(false);
+      }
+    };
+
+    loadInvalidReports();
+  }, [report.id]);
+
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
     const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -194,14 +225,51 @@ export default function AdminReportDetailModal({
           </div>
 
           {/* Coordinates */}
-          <div className="bg-gray-900 rounded-xl p-4 text-white mb-6">
+          <div className="bg-gray-100 rounded-xl p-4 mb-6">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-xs text-gray-400 uppercase tracking-wider">Koordinat</span>
-                <p className="font-mono text-sm mt-1">{report.lat?.toFixed(6) ?? 'N/A'}, {report.lng?.toFixed(6) ?? 'N/A'}</p>
+                <span className="text-xs text-gray-500 uppercase tracking-wider">Koordinat</span>
+                <p className="font-mono text-sm mt-1 text-gray-800">{report.lat?.toFixed(6) ?? 'N/A'}, {report.lng?.toFixed(6) ?? 'N/A'}</p>
               </div>
             </div>
           </div>
+
+          {/* Laporan Tidak Valid Section */}
+          {reportInvalidReports.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                Laporan Tidak Valid ({reportInvalidReports.length})
+              </h3>
+              {loadingInvalidReports ? (
+                <div className="bg-gray-50 rounded-xl p-4 text-center">
+                  <p className="text-sm text-gray-500">Memuat...</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {reportInvalidReports.map((ir) => (
+                    <div key={ir.id} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <span className="text-xs font-semibold text-amber-700">
+                          {ir.reporterName || 'Anonim'}
+                        </span>
+                        <span className="text-xs text-amber-600">
+                          {(() => {
+                            const date = new Date(ir.createdAt);
+                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+                            return `${date.getUTCDate()} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+                          })()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                        {ir.reason}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Actions - Only for PENDING */}
           {onUpdateStatus && report.status === 'PENDING' && (
